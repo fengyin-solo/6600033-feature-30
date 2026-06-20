@@ -148,5 +148,41 @@ export const useMCStore = defineStore('mc', () => {
     return { xAxis: Array.from({ length: bins }, (_, i) => Math.round((mn + i * bs) * 100) / 100), data: counts }
   })
 
-  return { currentScenario, iterations, result, testResult, isRunning, convergenceData, histogramData, runSimulation, runTest, setScenario }
+  function serializeShareState(group1: number[], group2: number[]): string {
+    const state = {
+      s: currentScenario.value.id,
+      n: iterations.value,
+      g1: group1,
+      g2: group2
+    }
+    const json = JSON.stringify(state)
+    return btoa(encodeURIComponent(json))
+  }
+
+  function deserializeShareState(encoded: string): { scenarioId: string; iterations: number; group1: number[]; group2: number[] } | null {
+    try {
+      const json = decodeURIComponent(atob(encoded))
+      const state = JSON.parse(json)
+      if (!state.s || !state.n || !state.g1 || !state.g2) return null
+      return {
+        scenarioId: state.s,
+        iterations: state.n,
+        group1: state.g1,
+        group2: state.g2
+      }
+    } catch {
+      return null
+    }
+  }
+
+  function applyShareState(scenarioId: string, iter: number) {
+    const scenario = SCENARIOS.find(s => s.id === scenarioId)
+    if (scenario) {
+      currentScenario.value = scenario
+      result.value = null
+    }
+    iterations.value = iter
+  }
+
+  return { currentScenario, iterations, result, testResult, isRunning, convergenceData, histogramData, runSimulation, runTest, setScenario, serializeShareState, deserializeShareState, applyShareState }
 })

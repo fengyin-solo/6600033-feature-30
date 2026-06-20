@@ -1,8 +1,14 @@
 <template>
   <div class="min-h-screen bg-slate-900 text-slate-200">
-    <header class="border-b border-slate-700 px-6 py-4">
-      <h1 class="text-2xl font-bold text-cyan-400">蒙特卡洛模拟与统计假设检验平台</h1>
-      <p class="text-sm text-slate-500 mt-1">随机采样模拟 · 6种MC场景 · 假设检验 · 置信区间可视化</p>
+    <header class="border-b border-slate-700 px-6 py-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-cyan-400">蒙特卡洛模拟与统计假设检验平台</h1>
+        <p class="text-sm text-slate-500 mt-1">随机采样模拟 · 6种MC场景 · 假设检验 · 置信区间可视化</p>
+      </div>
+      <button @click="shareLink" :disabled="copied" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-sm font-bold flex items-center gap-2 transition-all">
+        <span v-if="copied" class="text-emerald-200">✓ 已复制链接</span>
+        <span v-else>🔗 分享结果</span>
+      </button>
     </header>
     <div class="flex flex-col lg:flex-row gap-4 p-4">
       <div class="lg:w-1/4 space-y-4">
@@ -78,6 +84,7 @@ const convergenceRef = ref<HTMLDivElement | null>(null)
 const histogramRef = ref<HTMLDivElement | null>(null)
 const group1Input = ref('5.1,4.8,5.3,4.9,5.2,5.0,4.7,5.1,5.4,4.8')
 const group2Input = ref('4.6,4.2,4.9,4.3,4.5,4.7,4.4,4.8,4.1,4.6')
+const copied = ref(false)
 let convChart: echarts.ECharts | null = null
 let histChart: echarts.ECharts | null = null
 
@@ -115,6 +122,40 @@ function runTest() {
   if (g1.length > 1 && g2.length > 1) store.runTest(g1, g2)
 }
 
-onMounted(() => { initCharts(); store.runSimulation() })
+function shareLink() {
+  const g1 = group1Input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+  const g2 = group2Input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+  const state = store.serializeShareState(g1, g2)
+  const url = `${window.location.origin}${window.location.pathname}?share=${state}`
+  navigator.clipboard.writeText(url).then(() => {
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  })
+}
+
+function loadFromUrl() {
+  const params = new URLSearchParams(window.location.search)
+  const share = params.get('share')
+  if (!share) return false
+  const state = store.deserializeShareState(share)
+  if (!state) return false
+  store.applyShareState(state.scenarioId, state.iterations)
+  group1Input.value = state.group1.join(',')
+  group2Input.value = state.group2.join(',')
+  return true
+}
+
+onMounted(() => {
+  initCharts()
+  const hasShare = loadFromUrl()
+  if (hasShare) {
+    store.runSimulation()
+    const g1 = group1Input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+    const g2 = group2Input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
+    if (g1.length > 1 && g2.length > 1) store.runTest(g1, g2)
+  } else {
+    store.runSimulation()
+  }
+})
 watch(() => store.result, () => updateCharts(), { deep: true })
 </script>
