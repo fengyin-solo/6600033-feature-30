@@ -156,12 +156,23 @@ export const useMCStore = defineStore('mc', () => {
       g2: group2
     }
     const json = JSON.stringify(state)
-    return btoa(encodeURIComponent(json))
+    let binary = ''
+    for (let i = 0; i < json.length; i++) {
+      binary += String.fromCharCode(json.charCodeAt(i) & 0xff)
+    }
+    const b64 = btoa(binary)
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
   }
 
   function deserializeShareState(encoded: string): { scenarioId: string; iterations: number; group1: number[]; group2: number[] } | null {
     try {
-      const json = decodeURIComponent(atob(encoded))
+      let b64 = encoded.replace(/-/g, '+').replace(/_/g, '/')
+      while (b64.length % 4) b64 += '='
+      const binary = atob(b64)
+      let json = ''
+      for (let i = 0; i < binary.length; i++) {
+        json += String.fromCharCode(binary.charCodeAt(i) & 0xff)
+      }
       const state = JSON.parse(json)
       if (!state.s || !state.n || !state.g1 || !state.g2) return null
       return {

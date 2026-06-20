@@ -6,10 +6,32 @@
         <p class="text-sm text-slate-500 mt-1">随机采样模拟 · 6种MC场景 · 假设检验 · 置信区间可视化</p>
       </div>
       <button @click="shareLink" :disabled="copied" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded text-sm font-bold flex items-center gap-2 transition-all">
-        <span v-if="copied" class="text-emerald-200">✓ 已复制链接</span>
-        <span v-else>🔗 分享结果</span>
+        <span v-if="copied" class="text-emerald-200">✓ 已复制</span>
+        <span v-else>🔗 分享分析</span>
       </button>
     </header>
+    <div v-if="showShareModal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" @click.self="showShareModal = false">
+      <div class="bg-slate-800 border border-slate-600 rounded-lg p-6 w-full max-w-xl">
+        <h3 class="text-lg font-bold text-cyan-400 mb-2">🔗 分享分析结果</h3>
+        <p class="text-sm text-slate-400 mb-4">复制下方链接，他人打开即可还原相同的分析配置（场景、迭代次数、两组检验数据）。</p>
+        <div class="flex gap-2 mb-4">
+          <input ref="shareUrlInput" type="text" readonly :value="shareUrl" class="flex-1 bg-slate-900 border border-slate-600 rounded px-3 py-2 text-xs font-mono text-slate-300 focus:outline-none" />
+          <button @click="copyShareUrl" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-bold whitespace-nowrap">
+            {{ copied ? '✓ 已复制' : '复制链接' }}
+          </button>
+        </div>
+        <div class="bg-slate-900 rounded p-3 text-xs space-y-1">
+          <div class="text-slate-500">当前配置：</div>
+          <div class="flex justify-between"><span class="text-slate-400">模拟场景</span><span class="text-cyan-400 font-bold">{{ store.currentScenario.name }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">迭代次数</span><span class="text-slate-300">{{ store.iterations }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">样本组A</span><span class="text-slate-300 font-mono">{{ group1Input.length > 30 ? group1Input.slice(0, 30) + '...' : group1Input }}</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">样本组B</span><span class="text-slate-300 font-mono">{{ group2Input.length > 30 ? group2Input.slice(0, 30) + '...' : group2Input }}</span></div>
+        </div>
+        <div class="flex justify-end mt-4">
+          <button @click="showShareModal = false" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">关闭</button>
+        </div>
+      </div>
+    </div>
     <div class="flex flex-col lg:flex-row gap-4 p-4">
       <div class="lg:w-1/4 space-y-4">
         <div class="bg-slate-800 rounded-lg p-4 border border-slate-700">
@@ -82,9 +104,12 @@ import { useMCStore, SCENARIOS } from './store/mc'
 const store = useMCStore()
 const convergenceRef = ref<HTMLDivElement | null>(null)
 const histogramRef = ref<HTMLDivElement | null>(null)
+const shareUrlInput = ref<HTMLInputElement | null>(null)
 const group1Input = ref('5.1,4.8,5.3,4.9,5.2,5.0,4.7,5.1,5.4,4.8')
 const group2Input = ref('4.6,4.2,4.9,4.3,4.5,4.7,4.4,4.8,4.1,4.6')
 const copied = ref(false)
+const showShareModal = ref(false)
+const shareUrl = ref('')
 let convChart: echarts.ECharts | null = null
 let histChart: echarts.ECharts | null = null
 
@@ -122,15 +147,58 @@ function runTest() {
   if (g1.length > 1 && g2.length > 1) store.runTest(g1, g2)
 }
 
-function shareLink() {
+function fallbackCopy(text: string): boolean {
+  try {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '-9999px'
+    document.body.appendChild(textarea)
+    textarea.select()
+    const success = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    return success
+  } catch {
+    return false
+  }
+}
+
+function buildShareUrl(): string {
   const g1 = group1Input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
   const g2 = group2Input.value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n))
   const state = store.serializeShareState(g1, g2)
-  const url = `${window.location.origin}${window.location.pathname}?share=${state}`
-  navigator.clipboard.writeText(url).then(() => {
+  return `${window.location.origin}${window.location.pathname}?share=${encodeURIComponent(state)}`
+}
+
+async function copyShareUrl() {
+  let success = false
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl.value)
+      success = true
+    } else {
+      success = fallbackCopy(shareUrl.value)
+    }
+  } catch {
+    success = fallbackCopy(shareUrl.value)
+  }
+
+  if (success) {
     copied.value = true
     setTimeout(() => { copied.value = false }, 2000)
-  })
+  }
+}
+
+function shareLink() {
+  shareUrl.value = buildShareUrl()
+  copied.value = false
+  showShareModal.value = true
+  setTimeout(() => {
+    if (shareUrlInput.value) {
+      shareUrlInput.value.select()
+    }
+  }, 50)
 }
 
 function loadFromUrl() {
